@@ -1,0 +1,137 @@
+name: Provision ML Track Resources
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  provision:
+    if: contains(github.event.issue.title, 'ML Track Setup:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Run Provisioning Script
+        uses: actions/github-script@v6
+        env:
+          TEMPLATE_REPO: 'machine-learning-framework'
+          NEW_REPO_PREFIX: 'ml-track-'
+        with:
+          # PAT expires 1/8/2027.
+          github-token: ${{ secrets.ORG_ADMIN_TOKEN }}
+          script: |
+            const user = context.payload.issue.user.login;
+            const org = context.repo.owner;
+            const templateRepo = process.env.TEMPLATE_REPO;
+            const newRepoName = `${process.env.NEW_REPO_PREFIX}${user}`;
+
+            console.log(`🚀 Starting ML provisioning for @${user}...`);
+
+            // --- START GLOBAL TRY BLOCK ---
+            try { 
+
+              // Step 1: Create the new repository (With its own mini Try/Catch)
+              try {
+                await github.rest.repos.createUsingTemplate({
+                  template_owner: org,
+                  template_repo: templateRepo,
+                  name: newRepoName,
+                  owner: org,
+                  private: true,
+                  include_all_branches: false 
+                });
+                console.log(`✅ Repository ${newRepoName} created.`);
+              } catch (createError) {
+                // Error 422 = Repo already exists (Unprocessable Entity)
+                if (createError.status === 422) {
+                  console.log(`ℹ️ Repository ${newRepoName} already exists.`); 
+                  console.log(`   --> Skipping creation and proceeding to check permissions.`);
+                } else {
+                  throw createError; // Throw other errors up to the Global Catch
+                }
+              }
+
+              // Step 2: Add the intern to the new repository (Write Access)
+              await github.rest.repos.addCollaborator({
+                owner: org,
+                repo: newRepoName,
+                username: user,
+                permission: 'push' 
+              });
+              console.log(`✅ User @${user} added to repo.`);
+              
+              // Step 2a: Add the "Intern Leads" Team to the repo
+              try {
+                const leadsTeamSlug = 'intern-leads'; 
+                
+                await github.rest.teams.addOrUpdateRepoPermissionsInOrg({
+                  org: org,
+                  team_slug: leadsTeamSlug,
+                  owner: org,
+                  repo: newRepoName,
+                  permission: 'maintain' // 'maintain' = Write + Settings
+                });
+                console.log(`✅ Team ${leadsTeamSlug} added to repo.`);
+              } catch (teamError) {
+                console.log(`⚠️ Could not add Intern Leads team: ${teamError.message}`);
+                // Don't crash the whole script if this fails, just log it
+              }
+
+              // Step 3: Attempt to Invite to Organization
+              try {
+                await github.rest.orgs.setMembershipForUser({
+                  org: org,
+                  username: user,
+                  role: 'member'
+                });
+                console.log(`✅ User @${user} invited to Organization.`);
+              } catch (err) {
+                console.log(`ℹ️ Note on Org Invite: ${err.message}`);
+              }
+
+              // Step 4: Check if we already welcomed them (Spam Protection)
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+
+              const alreadyWelcomed = comments.data.find(comment => 
+                comment.body.includes(`🚀 Welcome to the ML Team, @${user}`)
+              );
+
+              if (alreadyWelcomed) {
+                console.log(`✨ User @${user} has already been welcomed. Skipping comment.`);
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `## 🚀 Welcome to the ML Team, @${user}!\n\nYour Machine Learning environment is ready.\n\n### 1️⃣ Accept your Invite\nCheck your email or [GitHub Notifications](https://github.com/notifications) to accept the invitation to the Organization (if you haven't already).\n\n### 2️⃣ Start Coding\nYour private repository is located here:\n**👉 https://github.com/${org}/${newRepoName}**\n\n### 3️⃣ Download the Data\nDon't forget to check the repo's README for instructions on downloading \`gold_data.parquet\` from the Google Drive folder!\n\n*(This issue will now automatically close)*`
+                });
+                console.log(`✅ Welcome message posted.`);
+              }
+
+              // Step 5: Close the Issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                state: 'closed'
+              });
+
+            } catch (error) {
+              // --- GLOBAL CATCH BLOCK ---
+              console.log(`❌ FATAL ERROR: ${error.message}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `⚠️ **Provisioning Failed**\n\nError: \`${error.message}\`\n\nPlease tag an instructor for help.`
+              });
+              core.setFailed(error.message);
+            }
