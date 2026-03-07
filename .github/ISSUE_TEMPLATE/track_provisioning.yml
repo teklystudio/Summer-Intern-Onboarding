@@ -1,0 +1,45 @@
+name: 🚀 Initialize ML Track Repository
+description: Provision your Machine Learning track repository.
+title: "ML Track Setup: [Your Name]"
+labels: ["provision-track", "automated"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Welcome to the ML Track! 🧠
+        Submitting this ticket triggers the **Provisioning Bot** to:
+        1. Create your private **ML Track Repository** (containing the modeling notebooks & data client).
+        2. Add you to the specialized GitHub Team (`@tekly-interns/ml-track`).
+
+  - type: textarea
+    id: instructions
+    attributes:
+      label: Instructions
+    validations:
+      required: false
+
+  - type: input
+    id: name
+    attributes:
+      label: Full Name
+      description: Please enter your full name as it appears in Airtable.
+      placeholder: ex. John Smith
+    validations:
+      required: true
+
+  - type: input
+    id: email
+    attributes:
+      label: Email Address
+      description: The email address associated with your internship application.
+      placeholder: ex. john.smith@university.edu
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Prerequisite Check
+      options:
+        - label: I have received my approval email and have access to the ML Data folder on Google Drive.
+          required: true
