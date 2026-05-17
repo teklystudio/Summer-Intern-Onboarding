@@ -21,7 +21,7 @@ jobs:
         env:
           # CONFIGURATION
           TEMPLATE_REPO: 'curriculum-template'
-          NEW_REPO_PREFIX: 'spring-lab-'
+          NEW_REPO_PREFIX: 'summer-lab-'
         with:
           # CRITICAL: Ensure this matches your Secret name exactly. PAT expires 1/8/2027.
           github-token: ${{ secrets.ORG_ADMIN_TOKEN }}
